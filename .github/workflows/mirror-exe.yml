@@ -1,0 +1,37 @@
+name: mirror-release-asset-to-raw
+on:
+  workflow_dispatch:
+    inputs:
+      asset_id:
+        description: Release asset id to mirror (empty = latest release first asset)
+        required: false
+        default: ''
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download release asset
+        run: |
+          TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          if [ -n "${{ github.event.inputs.asset_id }}" ]; then
+            AID="${{ github.event.inputs.asset_id }}"
+          else
+            REL=$(curl -s -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+            AID=$(echo "$REL" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['assets'][0]['id'])")
+          fi
+          curl -f -L -o "百家号发布助手.exe" \
+            -H "Authorization: token $TOKEN" \
+            -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/assets/$AID"
+          ls -la "百家号发布助手.exe"
+      - name: Commit and push
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add "百家号发布助手.exe"
+          git diff --cached --quiet || git commit -m "mirror release asset to raw (auto)"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main
